@@ -1,5 +1,6 @@
 #!/bin/python3
 
+
 def parse(filename, useNumpy=False):
     ''' a parser for Molecular Devices microplate reader files, to convert to
         a .csv, numpy vectors, or lists '''
@@ -181,13 +182,15 @@ def main():
                                                  'in Python 3 scripts.',
                                      epilog='Written by Matthew B. Wilson '
                                             '2020')
-    parser.add_argument('input', metavar='input', type=str, help='''\
-                        The input Molecular Devices text file.''', nargs='?')
+    parser.add_argument('INPUT', type=str, help='''\
+                        The input Molecular Devices text file.''')
     parser.add_argument('-o', '--output', metavar='output', type=str, help='''\
-                        (optional) The output .csv file name''', nargs='?',)
+                        (optional) The output .csv file name.
+                        If left blank, will be the input filename with
+                        extension .csv''',)
 
     args = parser.parse_args()
-    assert args.input is not None,"Need an input file!" 
+    assert args.input is not None, "Need an input file!"
 
     if args.output:
         writeToCSV(args.output, parse(args.input))
