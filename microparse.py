@@ -30,7 +30,6 @@ class rawFile(object):
         Uses the whitespace formatting to generate a sequence to break a raw
         file into time domain chunks.
         '''
-        print([i for i, value in enumerate(fileContent) if value == "\t\t\n"])
         return [i for i, value in enumerate(fileContent) if value == "\t\t\n"]
 
     def decode(self):
@@ -180,9 +179,6 @@ class parsedFile(object):
         self.timeSeries = timeSeries
         self.tempSeries = tempSeries
         self.experiments = experiments
-        print(self.timeSeries)
-        print(self.tempSeries)
-        print(self.experiments)
 
     def writeToCSV(self, filename):
 
