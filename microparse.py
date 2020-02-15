@@ -1,174 +1,198 @@
 #!/bin/python3
 
 
-def parse(filename, useNumpy=False):
-    ''' a parser for Molecular Devices microplate reader files, to convert to
-        a .csv, numpy vectors, or lists '''
+class rawFile(object):
 
-    def transformRemoveHeader(lineList):
-        ''' The above line gets rid of header information. In the future this
-            may be used in order to parse files differently, but for our
-            purposes where we just want to extract data from the series runs of
-            the microplate reader, this is okay. '''
+    class chunkList(object):
 
-        return lineList[3:]
+        class chunk(object):
 
-    def generateBoundaryList(noHeaderLineList):
-        ''' Generates the series of partitioning values which divide the
-            filecontent into time-domain structured table rows '''
+            def __init__(self, lines):
+                '''
+                A data object used in chunkList. Expects a set of lines that
+                make up a file chunk in the rawFile.fileContent
+                '''
+                self.rawFileChunk = lines
 
-        return [i for i, line in enumerate(noHeaderLineList)
-                if line == '\t\t\n']
+                self.secondsElapsed = 0
+                self.temperature = 0
+                self.experiments = []
 
-    def generateChunkList(boundaryList, noHeaderLineList):
-        ''' generates 'chunks' or vertical slices of all series data at one
-            timepoint via the values in boundaries. '''
+                self.processRawFileChunk()
 
-        chunkList = []
+            def __len__(self):
+                return len(self.rawFileChunk)
 
-        previousBound = 0
-        for bound in boundaryList:
-            chunkList.append(noHeaderLineList[previousBound:bound])
-            previousBound = bound + 1
+            def processRawFileChunk(self):
+                '''
+                Extracts data from a chunk. The experiment data is returned as
+                a list with each value being from a different series.
+                '''
 
-        return chunkList
+                def getSecondsElapsed(self):
+                    '''
+                    Gets the time of recording of the datachunk
+                    '''
 
-    def transformStringTimeToSeconds(stringTime):
-        ''' takes a stringList with values formatted as hh:mm:ss and converts
-            it to a list of elapsed seconds. '''
+                    def transformStringTimeToSeconds(self, stringTime):
+                        '''
+                        takes a string representation with values formatted as
+                        hh:mm:ss and converts it to a list of elapsed seconds.
+                        '''
 
-        hhmmssStrings = stringTime.split(":")
-        hhmmssValues = [int(xx) for xx in hhmmssStrings]
+                        hhmmssStrings = stringTime.split(":")
+                        hhmmssValues = [int(xx) for xx in hhmmssStrings]
 
-        if len(hhmmssValues) == 1:
+                        if len(hhmmssValues) == 1:
 
-            secondsElapsed = hhmmssValues[0]
+                            secondsElapsed = hhmmssValues[0]
 
-        elif len(hhmmssValues) == 2:
+                        elif len(hhmmssValues) == 2:
 
-            secondsElapsed = 60 * hhmmssValues[0] + hhmmssValues[1]
+                            secondsElapsed = 60 * hhmmssValues[0] \
+                                + hhmmssValues[1]
 
-        elif len(hhmmssValues) == 3:
+                        elif len(hhmmssValues) == 3:
 
-            secondsElapsed == 3600 * hhmmssValues[0] \
-                + 60 * hhmmssValues[1] + hhmmssValues[2]
+                            secondsElapsed == 3600 * hhmmssValues[0] \
+                                + 60 * hhmmssValues[1] + hhmmssValues[2]
 
-        return secondsElapsed
+                        return secondsElapsed
 
-    def getSeparatedChunkData(chunk):
-        ''' Extracts data from a chunk. The experiment data is returned as a
-            list with each value being from a different series. '''
+                    self.secondsElapsed = \
+                        transformStringTimeToSeconds(self.rawFileChunk[0]
+                                                     .split()[0])
 
-        secondsData = 0
-        temperatureData = 0
-        experimentData = []
+                def getTemperature(self):
+                    '''
+                    Gets the temperature at the time of recording for the data
+                    chunk
+                    '''
+                    self.temperature = float(self.rawFileChunk[0].split()[1])
 
-        currentLine = 0
-        for line in chunk:
-            ''' recall that using split() without any parameters will remove
-                all whitespace. '''
-            lineSplitList = line.split()
-            if currentLine == 0:
-                secondsData = transformStringTimeToSeconds(lineSplitList[0])
-                temperatureData = float(lineSplitList[1])
-                experimentData.append(float(lineSplitList[2]))
-            else:
-                experimentData.append(float(lineSplitList[0]))
+                def getExperiments(self):
+                    '''
+                    Gets the data for the set of experiments taken at
+                    self.secondsElapsed
+                    '''
+                    # Handle the first line
+                    data = [float(self.rawFileChunk[0].split()[2])]
+                    # Handle the rest
+                    for line in self.rawFileChunk[1:]:
+                        data.append(float(line.split()[0]))
 
-            currentLine += 1
+                    self.experiments = data
 
-        return [secondsData, temperatureData, experimentData]
+                self.getSecondsElapsed()
+                self.getTemperature()
+                self.getExperiments()
 
-    def generateAllSeries(chunkList):
-        ''' Takes a chunklist and gets data for all the chunks and organizes
-            that data into time-domain lists. '''
+        def __init__(self, boundaryList, fileContent):
+            '''
+            generates 'chunks' or vertical slices of all series data at one
+            timepoint via the values in boundaries.
+            '''
+            self.data = []
 
-        chunkLength = len(chunkList[0])
+            previousBound = 0
+            for bound in boundaryList:
+                self.data.append(self.chunk(fileContent[previousBound:bound]))
+                previousBound = bound + 1
 
-        experimentSeriesList = []
-        timeSeries = []
-        tempSeries = []
+            self.chunkLength = len(self.data[0])
 
-        for experiment in range(0, chunkLength):
-            experimentSeriesList.append([])
-        ''' Taking advantage of the fact that each line in a chunk corresponds
+        def __len__(self):
+            return len(self.data)
+
+    class parsedFile(object):
+
+        def __init__(self, timeSeries, tempSeries, experiments):
+
+            self.timeSeries = timeSeries
+            self.tempSeries = tempSeries
+            self.experiments = experiments
+
+        def writeToCSV(self, filename):
+
+            numberOfRows = len(self.timeSeries)
+            numberOfSeriesColumns = len(self.experiments)
+
+            def makeHeader():
+                seriesHeaders = []
+                for seriesnumber in range(1, numberOfSeriesColumns + 1):
+                    seriesHeaders.append("Series No. {}".format(seriesnumber))
+                return ['Time (s)', 'Temperature (C)'] + seriesHeaders
+
+            def makeRow(rowNumber):
+                ''' makes a row of a csv table using the parsed file object and an
+                    arbitrary row number '''
+                timeTempColumns = [self.timeSeries[rowNumber],
+                                   self.tempSeries[rowNumber]]
+                experimentColumns = [self.experiment[rowNumber] for experiment
+                                     in self.experiments]
+                return timeTempColumns + experimentColumns
+
+            import csv
+
+            with open(filename, 'w') as csvfile:
+
+                writer = csv.writer(csvfile)
+                writer.writerow(makeHeader())
+                for currentRow in range(0, numberOfRows):
+                    writer.writerow(makeRow(currentRow))
+
+    def __init__(self, filename):
+        '''
+        a raw microplate devices file to be decoded.
+        expects a filename.
+        '''
+        with open(filename, encoding='utf-8') as file:
+            rawContent = file.readlines()
+            fileContent = self.removeHeader(rawContent)
+
+        self.chunks = self.chunkList(self.generateBoundaryList(fileContent),
+                                     fileContent)
+
+    def removeHeader(self, rawContent):
+        '''
+        The above line gets rid of header information. In the future this
+        may be used in order to parse files differently, but for our
+        purposes where we just want to extract data from the series runs of
+        the microplate reader, this is okay.
+        '''
+
+        return rawContent[3:]
+
+    def generateBoundaryList(self, fileContent):
+        '''
+        Uses the whitespace formatting to generate a sequence to break a raw
+        file into time domain chunks.
+        '''
+        return [i for i in enumerate(fileContent) if i == "\t\t\n"]
+
+    def decode(self):
+        '''
+        Decodes a rawFile and returns a decodedFile to use.
+        '''
+        timeSeries, tempSeries, experiments = []
+
+        for experiment in range(0, self.chunks.chunkLength):
+            self.experiments.append([])
+            '''
+            Taking advantage of the fact that each line in a chunk corresponds
             to a different experiment series here. This sets up the correct no.
-            of lists to organize experimentData into. '''
+            of lists to organize experimentData into.
+            '''
 
-        for chunk in chunkList:
+        for chunk in self.chunks:
+            timeSeries.append(chunk.secondsElapsed)
+            tempSeries.append(chunk.temperature)
 
-            time, temp, experimentData = getSeparatedChunkData(chunk)
+            for experiment in range(0, chunk.experiments):
+                self.experiments[experiment]\
+                    .append(chunk.experiments[experiment])
 
-            currentExperimentSeries = 0
-            for experimentValue in experimentData:
-
-                experimentSeriesList[currentExperimentSeries].append(
-                    experimentValue)
-                currentExperimentSeries += 1
-
-            timeSeries.append(time)
-            tempSeries.append(temp)
-
-        return [timeSeries, tempSeries, experimentSeriesList]
-
-    def convertAllSeriesToNumpy(allSeriesList):
-
-        import numpy as np
-
-        timeNumpySeries = np.array(allSeriesList[0])
-        tempNumpySeries = np.array(allSeriesList[1])
-        experimentNumpySeriesList = [np.array(experimentSeries)
-                                     for experimentSeries in allSeriesList[2]]
-
-        return [timeNumpySeries, tempNumpySeries, experimentNumpySeriesList]
-
-    '''
-    Begin Function
-    '''
-    with open(filename, encoding='utf-8') as file:
-        content = file.readlines()
-
-    content = transformRemoveHeader(content)
-    boundaries = generateBoundaryList(content)
-    chunks = generateChunkList(boundaries, content)
-
-    if useNumpy is True:
-        allSeries = convertAllSeriesToNumpy(generateAllSeries(chunks))
-    else:
-        allSeries = generateAllSeries(chunks)
-
-    return allSeries
-
-
-def writeToCSV(filename, parsedFileObject):
-
-    numberOfRows = len(parsedFileObject[0])
-    numberOfSeriesColumns = len(parsedFileObject[2])
-
-    def makeHeader(parsedFileObject):
-        seriesHeaders = []
-        for seriesnumber in range(1, numberOfSeriesColumns + 1):
-            seriesHeaders.append("Series No. {}".format(seriesnumber))
-        return ['Time (s)', 'Temperature (C)'] + seriesHeaders
-
-    def makeRow(parsedFileObject, rowNumber):
-        ''' makes a row of a csv table using the parsed file object and an
-            arbitrary row number '''
-        timeTempColumns = [parsedFileObject[0][rowNumber],
-                           parsedFileObject[1][rowNumber]]
-        experimentColumns = [experimentSeries[rowNumber] for experimentSeries
-                             in parsedFileObject[2]]
-
-        return timeTempColumns + experimentColumns
-
-    import csv
-
-    with open(filename, 'w') as csvfile:
-
-        writer = csv.writer(csvfile)
-        writer.writerow(makeHeader(parsedFileObject))
-        for currentRow in range(0, numberOfRows):
-            writer.writerow(makeRow(parsedFileObject, currentRow))
+        return self.parsedFile(timeSeries, tempSeries, experiments)
 
 
 def main():
@@ -190,12 +214,15 @@ def main():
                         extension .csv''',)
 
     args = parser.parse_args()
-    assert args.input is not None, "Need an input file!"
+    assert args.INPUT is not None, "Need an input file!"
+
+    file = rawFile(args.INPUT)
+    processedFile = file.decode()
 
     if args.output:
-        writeToCSV(args.output, parse(args.input))
+        processedFile.writeToCSV(args.output)
     else:
-        writeToCSV(args.input.split('.')[0] + '.csv', parse(args.input))
+        processedFile.writeToCSV(args.input.split('.')[0] + '.csv')
 
     return 0
 
