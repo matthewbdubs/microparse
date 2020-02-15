@@ -29,12 +29,12 @@ class rawFile(object):
                 a list with each value being from a different series.
                 '''
 
-                def getSecondsElapsed(self):
+                def getSecondsElapsed():
                     '''
                     Gets the time of recording of the datachunk
                     '''
 
-                    def transformStringTimeToSeconds(self, stringTime):
+                    def transformStringTimeToSeconds(stringTime):
                         '''
                         takes a string representation with values formatted as
                         hh:mm:ss and converts it to a list of elapsed seconds.
@@ -63,14 +63,14 @@ class rawFile(object):
                         transformStringTimeToSeconds(self.rawFileChunk[0]
                                                      .split()[0])
 
-                def getTemperature(self):
+                def getTemperature():
                     '''
                     Gets the temperature at the time of recording for the data
                     chunk
                     '''
                     self.temperature = float(self.rawFileChunk[0].split()[1])
 
-                def getExperiments(self):
+                def getExperiments():
                     '''
                     Gets the data for the set of experiments taken at
                     self.secondsElapsed
@@ -83,9 +83,9 @@ class rawFile(object):
 
                     self.experiments = data
 
-                self.getSecondsElapsed()
-                self.getTemperature()
-                self.getExperiments()
+                getSecondsElapsed()
+                getTemperature()
+                getExperiments()
 
         def __init__(self, boundaryList, fileContent):
             '''
@@ -100,9 +100,20 @@ class rawFile(object):
                 previousBound = bound + 1
 
             self.chunkLength = len(self.data[0])
+            self.__chunkIndex = 0
 
         def __len__(self):
             return len(self.data)
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            if self.__chunkIndex >= len(self):
+                raise StopIteration
+            else:
+                self.__chunkIndex += 1
+                return self.data[self.__chunkIndex - 1]
 
     class parsedFile(object):
 
@@ -111,6 +122,9 @@ class rawFile(object):
             self.timeSeries = timeSeries
             self.tempSeries = tempSeries
             self.experiments = experiments
+            print(self.timeSeries)
+            print(self.tempSeries)
+            print(self.experiments)
 
         def writeToCSV(self, filename):
 
@@ -128,7 +142,7 @@ class rawFile(object):
                     arbitrary row number '''
                 timeTempColumns = [self.timeSeries[rowNumber],
                                    self.tempSeries[rowNumber]]
-                experimentColumns = [self.experiment[rowNumber] for experiment
+                experimentColumns = [experiment[rowNumber] for experiment
                                      in self.experiments]
                 return timeTempColumns + experimentColumns
 
@@ -168,16 +182,19 @@ class rawFile(object):
         Uses the whitespace formatting to generate a sequence to break a raw
         file into time domain chunks.
         '''
-        return [i for i in enumerate(fileContent) if i == "\t\t\n"]
+        print([i for i, value in enumerate(fileContent) if value == "\t\t\n"])
+        return [i for i, value in enumerate(fileContent) if value == "\t\t\n"]
 
     def decode(self):
         '''
         Decodes a rawFile and returns a decodedFile to use.
         '''
-        timeSeries, tempSeries, experiments = []
+        timeSeries = []
+        tempSeries = []
+        experiments = []
 
         for experiment in range(0, self.chunks.chunkLength):
-            self.experiments.append([])
+            experiments.append([])
             '''
             Taking advantage of the fact that each line in a chunk corresponds
             to a different experiment series here. This sets up the correct no.
@@ -188,9 +205,8 @@ class rawFile(object):
             timeSeries.append(chunk.secondsElapsed)
             tempSeries.append(chunk.temperature)
 
-            for experiment in range(0, chunk.experiments):
-                self.experiments[experiment]\
-                    .append(chunk.experiments[experiment])
+            for experiment in range(0, len(chunk.experiments)):
+                experiments[experiment].append(chunk.experiments[experiment])
 
         return self.parsedFile(timeSeries, tempSeries, experiments)
 
@@ -222,10 +238,11 @@ def main():
     if args.output:
         processedFile.writeToCSV(args.output)
     else:
-        processedFile.writeToCSV(args.input.split('.')[0] + '.csv')
+        processedFile.writeToCSV(args.INPUT.split('.')[0] + '.csv')
 
     return 0
 
 
 if __name__ == '__main__':
     main()
+
