@@ -43,3 +43,17 @@ decodedTestFile.experiments
 ```
 
 `timeSeries` and `tempSeries` attributes are lists of values, while `experiments` is a list of lists -- or rather, a list of experimentSeries (which is nicer to think about).
+
+If you want `timeSeries`, `tempSeries`, or the series in `experiments` to return as numpy arrays/vectors, set `useNumPy` to `True` when decoding:
+
+```python
+import microparse
+
+testfile = microparse.rawFile('molDeviceFile.txt')
+decodedTestFile = testfile.decode(useNumPy=True)
+
+# The actual data a file contains! But they're NumPy arrays!
+decodedTestFile.timeSeries
+decodedTestFile.tempSeries
+decodedTestFile.experiments
+```

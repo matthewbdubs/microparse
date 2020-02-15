@@ -32,7 +32,7 @@ class rawFile(object):
         '''
         return [i for i, value in enumerate(fileContent) if value == "\t\t\n"]
 
-    def decode(self):
+    def decode(self, useNumPy=False):
         '''
         Decodes a rawFile and returns a decodedFile to use.
         '''
@@ -55,7 +55,7 @@ class rawFile(object):
             for experiment in range(0, len(chunk.experiments)):
                 experiments[experiment].append(chunk.experiments[experiment])
 
-        return parsedFile(timeSeries, tempSeries, experiments)
+        return parsedFile(timeSeries, tempSeries, experiments, useNumPy)
 
 
 class chunk(object):
@@ -174,11 +174,18 @@ class chunkList(object):
 
 class parsedFile(object):
 
-    def __init__(self, timeSeries, tempSeries, experiments):
+    def __init__(self, timeSeries, tempSeries, experiments, useNumPy=False):
 
-        self.timeSeries = timeSeries
-        self.tempSeries = tempSeries
-        self.experiments = experiments
+        if useNumPy:
+            import numpy
+            self.timeSeries = numpy.array(timeSeries)
+            self.tempSeries = numpy.array(tempSeries)
+            self.experiments = [numpy.array(experiment) for
+                                experiment in experiments]
+        else:
+            self.timeSeries = timeSeries
+            self.tempSeries = tempSeries
+            self.experiments = experiments
 
     def writeToCSV(self, filename):
 
