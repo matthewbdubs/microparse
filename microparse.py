@@ -11,20 +11,23 @@ class rawFile(object):
         self.filename = filename
         self.isVerbose = isVerbose
         self.isVeryVerbose = isVeryVerbose
+        self.numHeaderLines = 3
 
         if self.isVeryVerbose:
 
             print("Reading file " + self.filename)
 
         with open(self.filename, encoding="latin-1") as file:
-            rawContent = file.readlines()
-            fileContent = self.removeHeader(rawContent)
+            self.removeHeader(file)
+            boundaryList = self.generateBoundaryList(file)
 
-        self.chunks = chunkList(self.generateBoundaryList(fileContent),
-                                fileContent, isVerbose=self.isVerbose,
-                                isVeryVerbose=self.isVeryVerbose)
+        with open(self.filename, encoding="latin-1") as file:
 
-    def removeHeader(self, rawContent):
+            self.chunks = chunkList(boundaryList, fileContent,
+                                    isVerbose=self.isVerbose,
+                                    isVeryVerbose=self.isVeryVerbose)
+
+    def removeHeader(self, fileIterable):
         '''
         The above line gets rid of header information. In the future this
         may be used in order to parse files differently, but for our
@@ -32,15 +35,17 @@ class rawFile(object):
         the microplate reader, this is okay.
         '''
 
-        return rawContent[3:]
+        for i in range(0, self.numHeaderLines):
+            next(fileIterable)
 
-    def generateBoundaryList(self, fileContent):
+    def generateBoundaryList(self, fileIterable):
         '''
         Uses the whitespace formatting to generate a sequence to break a raw
         file into time domain chunks.
         '''
-        boundaryList = [i for i, value in enumerate(fileContent)
-                        if value == "\t\t\n"]
+
+        boundaryList = [i - self.numHeaderLines for i, line in
+                        enumerate(fileIterable) if line == "\t\t\n"]
 
         if self.isVeryVerbose:
 
@@ -65,18 +70,7 @@ class rawFile(object):
             of lists to organize experimentData into.
             '''
 
-        if self.isVeryVerbose:
-
-            chunkcount = 1
-
         for chunk in self.chunks:
-
-            if self.isVeryVerbose:
-
-                print("Processing chunk {} of {} for {} decode"
-                      .format(chunkcount, len(self.chunks), self.filename))
-
-                chunkcount += 1
 
             timeSeries.append(chunk.secondsElapsed)
             tempSeries.append(chunk.temperature)
@@ -252,12 +246,13 @@ class parsedFile(object):
                                self.tempSeries[rowNumber]]
             experimentColumns = [experiment[rowNumber] for experiment
                                  in self.experiments]
-            if self.isVeryVerbose:
-
-                print("Processed table row {} of {} for csv: {}"
-                      .format(rowNumber + 1, numberOfRows, filename))
 
             return timeTempColumns + experimentColumns
+
+        if self.isVeryVerbose:
+
+            print("Finished processing csv table for ")
+
 
         import csv
 
@@ -317,13 +312,11 @@ def main():
                                             '2020')
 
     parser.add_argument('-i', '--input', type=str, help='''\
-                        The input Molecular Devices text
-                        filenames.''', nargs='+')
+                        The input Molecular Devices text filenames.''',
+                        nargs='+')
 
     parser.add_argument('-o', '--output', type=str, help='''\
-                        (optional) The output .csv filenames.
-                        If left blank, will be the input filename with
-                        extension .csv''', nargs='+')
+                        the output .csv filenames.''', nargs='+')
 
     parser.add_argument('-v', '--verbose', action='store_true', help='''\
                         enables debug printing''')
