@@ -3,17 +3,26 @@
 
 class rawFile(object):
 
-    def __init__(self, filename):
+    def __init__(self, filename, isVerbose=False, isVeryVerbose=False):
         '''
         a raw microplate devices file to be decoded.
         expects a filename.
         '''
-        with open(filename, encoding="latin-1") as file:
+        self.filename = filename
+        self.isVerbose = isVerbose
+        self.isVeryVerbose = isVeryVerbose
+
+        if self.isVeryVerbose:
+
+            print("Reading file " + self.filename)
+
+        with open(self.filename, encoding="latin-1") as file:
             rawContent = file.readlines()
             fileContent = self.removeHeader(rawContent)
 
         self.chunks = chunkList(self.generateBoundaryList(fileContent),
-                                fileContent)
+                                fileContent, isVerbose=self.isVerbose,
+                                isVeryVerbose=self.isVeryVerbose)
 
     def removeHeader(self, rawContent):
         '''
@@ -30,7 +39,15 @@ class rawFile(object):
         Uses the whitespace formatting to generate a sequence to break a raw
         file into time domain chunks.
         '''
-        return [i for i, value in enumerate(fileContent) if value == "\t\t\n"]
+        boundaryList = [i for i, value in enumerate(fileContent)
+                        if value == "\t\t\n"]
+
+        if self.isVeryVerbose:
+
+            print("generated boundaryList for :" + self.filename)
+            print(boundaryList)
+
+        return boundaryList
 
     def decode(self, useNumPy=False):
         '''
@@ -48,24 +65,40 @@ class rawFile(object):
             of lists to organize experimentData into.
             '''
 
+        if self.isVeryVerbose:
+
+            chunkcount = 1
+
         for chunk in self.chunks:
+
+            if self.isVeryVerbose:
+
+                print("Processing chunk {} of {} for {} decode"
+                      .format(chunkcount, len(self.chunks), self.filename))
+
+                chunkcount += 1
+
             timeSeries.append(chunk.secondsElapsed)
             tempSeries.append(chunk.temperature)
 
             for experiment in range(0, len(chunk.experiments)):
                 experiments[experiment].append(chunk.experiments[experiment])
 
-        return parsedFile(timeSeries, tempSeries, experiments, useNumPy)
+        return parsedFile(timeSeries, tempSeries, experiments, useNumPy,
+                          isVerbose=self.isVerbose,
+                          isVeryVerbose=self.isVeryVerbose)
 
 
 class chunk(object):
 
-    def __init__(self, lines):
+    def __init__(self, lines, isVerbose=False, isVeryVerbose=False):
         '''
         A data object used in chunkList. Expects a set of lines that
         make up a file chunk in the rawFile.fileContent
         '''
         self.rawFileChunk = lines
+        self.isVerbose = isVerbose
+        self.isVeryVerbose = isVeryVerbose
 
         self.secondsElapsed = 0
         self.temperature = 0
@@ -143,20 +176,29 @@ class chunk(object):
 
 class chunkList(object):
 
-    def __init__(self, boundaryList, fileContent):
+    def __init__(self, boundaryList, fileContent, isVerbose=False,
+                 isVeryVerbose=False):
         '''
         generates 'chunks' or vertical slices of all series data at one
         timepoint via the values in boundaries.
         '''
         self.data = []
+        self.isVerbose = isVerbose
+        self.isVeryVerbose = isVeryVerbose
 
         previousBound = 0
         for bound in boundaryList:
-            self.data.append(chunk(fileContent[previousBound:bound]))
+            self.data.append(chunk(fileContent[previousBound:bound],
+                                   isVerbose=self.isVerbose,
+                                   isVeryVerbose=self.isVeryVerbose))
             previousBound = bound + 1
 
         self.chunkLength = len(self.data[0])
         self.__chunkIndex = 0
+
+        if self.isVeryVerbose:
+
+            print("finished instantiating chunkList")
 
     def __len__(self):
         return len(self.data)
@@ -174,9 +216,14 @@ class chunkList(object):
 
 class parsedFile(object):
 
-    def __init__(self, timeSeries, tempSeries, experiments, useNumPy=False):
+    def __init__(self, timeSeries, tempSeries, experiments, useNumPy=False,
+                 isVerbose=False, isVeryVerbose=False):
+
+        self.isVerbose = isVerbose
+        self.isVeryVerbose = isVeryVerbose
 
         if useNumPy:
+
             import numpy
             self.timeSeries = numpy.array(timeSeries)
             self.tempSeries = numpy.array(tempSeries)
@@ -205,6 +252,11 @@ class parsedFile(object):
                                self.tempSeries[rowNumber]]
             experimentColumns = [experiment[rowNumber] for experiment
                                  in self.experiments]
+            if self.isVeryVerbose:
+
+                print("Processed table row {} of {} for csv: {}"
+                      .format(rowNumber + 1, numberOfRows, filename))
+
             return timeTempColumns + experimentColumns
 
         import csv
@@ -216,11 +268,45 @@ class parsedFile(object):
             for currentRow in range(0, numberOfRows):
                 writer.writerow(makeRow(currentRow))
 
+        if self.isVerbose:
+
+            print("Wrote output csv file: " + filename)
+
 
 def main():
 
     import argparse
     import pathlib
+
+    def processFile(filename, output=None, isVerbose=False,
+                    isVeryVerbose=False):
+        '''
+        Takes an inputfile and makes it a .csv, named output.csv if output is
+        provided
+        '''
+
+        filepath = pathlib.Path(filename)
+
+        if not filepath.exists():
+
+            print(filename + ": file does not exist")
+            return 1
+
+        if output:
+
+            rawFile(filename,
+                    isVerbose=isVerbose,
+                    isVeryVerbose=isVeryVerbose).decode().writeToCSV(output)
+        else:
+
+            if isVeryVerbose:
+                print("auto-generated output filename: " +
+                      filename.split(".")[0] + ".csv")
+
+            rawFile(filename,
+                    isVerbose=isVerbose,
+                    isVeryVerbose=isVeryVerbose)\
+                .decode().writeToCSV(filename.split(".")[0] + ".csv")
 
     parser = argparse.ArgumentParser(description='A small program to convert '
                                                  'Molecular Devices microplate'
@@ -229,27 +315,51 @@ def main():
                                                  'in Python 3 scripts.',
                                      epilog='Written by Matthew B. Wilson '
                                             '2020')
-    parser.add_argument('INPUT', type=str, help='''\
-                        The input Molecular Devices text file.''')
-    parser.add_argument('-o', '--output', metavar='output', type=str, help='''\
-                        (optional) The output .csv file name.
+
+    parser.add_argument('-i', '--input', type=str, help='''\
+                        The input Molecular Devices text
+                        filenames.''', nargs='+')
+
+    parser.add_argument('-o', '--output', type=str, help='''\
+                        (optional) The output .csv filenames.
                         If left blank, will be the input filename with
-                        extension .csv''',)
+                        extension .csv''', nargs='+')
+
+    parser.add_argument('-v', '--verbose', action='store_true', help='''\
+                        enables debug printing''')
+
+    parser.add_argument('-vv', '--veryverbose', action='store_true', help='''\
+                        extra debug printing''')
 
     args = parser.parse_args()
 
-    file = pathlib.Path(args.INPUT)
-    if not file.exists():
-        print(args.INPUT + ": file does not exist")
-        return 1
+    if args.input:
 
-    file = rawFile(args.INPUT)
-    processedFile = file.decode()
+        if args.output:
 
-    if args.output:
-        processedFile.writeToCSV(args.output)
+            if len(args.output) != len(args.input):
+                print('error: number of outputs must match number of inputs')
+                return 1
+
+            for inputFile, outputFile in zip(args.input, args.output):
+
+                processFile(inputFile, output=outputFile,
+                            isVerbose=(args.verbose or args.veryverbose),
+                            isVeryVerbose=args.veryverbose)
+
+        else:
+
+            for inputFile in args.input:
+
+                processFile(inputFile,
+                            isVerbose=(args.verbose or args.veryverbose),
+                            isVeryVerbose=args.veryverbose)
+
+        print("done. {} files processed.".format(len(args.input)))
+
     else:
-        processedFile.writeToCSV(args.INPUT.split('.')[0] + '.csv')
+
+        parser.print_help()
 
     return 0
 
