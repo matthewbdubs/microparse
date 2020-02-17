@@ -8,9 +8,10 @@ class rawFile(object):
         a raw microplate devices file to be decoded.
         expects a filename.
         '''
-        self.filename = filename
         self.isVerbose = isVerbose
         self.isVeryVerbose = isVeryVerbose
+
+        self.filename = filename
         self.numHeaderLines = 3
 
         if self.isVeryVerbose:
@@ -19,50 +20,45 @@ class rawFile(object):
 
         with open(self.filename, encoding="latin-1") as file:
             self.removeHeader(file)
-            boundaryList = self.generateBoundaryList(file)
-
-        with open(self.filename, encoding="latin-1") as file:
-
-            self.chunks = chunkList(boundaryList, fileContent,
-                                    isVerbose=self.isVerbose,
-                                    isVeryVerbose=self.isVeryVerbose)
+            self.chunks = self.readChunks(file)
 
     def removeHeader(self, fileIterable):
         '''
         The above line gets rid of header information. In the future this
         may be used in order to parse files differently, but for our
-        purposes where we just want to extract data from the series runs of
-        the microplate reader, this is okay.
+        purposes where we just are processing kinetics studies.
         '''
 
         for i in range(0, self.numHeaderLines):
             next(fileIterable)
 
-    def generateBoundaryList(self, fileIterable):
+    def readChunks(self, fileIterable):
         '''
-        Uses the whitespace formatting to generate a sequence to break a raw
-        file into time domain chunks.
+        looks for separator '\t\t\n' to distinguish between time points.
         '''
 
-        boundaryList = [i - self.numHeaderLines for i, line in
-                        enumerate(fileIterable) if line == "\t\t\n"]
+        chunkBuffer = []
+        chunks = chunkList(isVerbose=self.isVeryVerbose,
+                           isVeryVerbose=self.isVeryVerbose)
+        for line in fileIterable:
+            if line == "\t\t\n":
+                chunks.append(chunk(chunkBuffer))
+                chunkBuffer = []
+            else:
+                chunkBuffer.append(line)
 
-        if self.isVeryVerbose:
-
-            print("generated boundaryList for :" + self.filename)
-            print(boundaryList)
-
-        return boundaryList
+        return chunks
 
     def decode(self, useNumPy=False):
         '''
-        Decodes a rawFile and returns a decodedFile to use.
+        Decodes a rawFile and returns a parsedFile to use.
         '''
+
         timeSeries = []
         tempSeries = []
         experiments = []
 
-        for experiment in range(0, self.chunks.chunkLength):
+        for experiment in range(0, len(self.chunks[0])):
             experiments.append([])
             '''
             Taking advantage of the fact that each line in a chunk corresponds
@@ -170,32 +166,39 @@ class chunk(object):
 
 class chunkList(object):
 
-    def __init__(self, boundaryList, fileContent, isVerbose=False,
-                 isVeryVerbose=False):
+    def __init__(self, data=None, isVerbose=False, isVeryVerbose=False):
         '''
         generates 'chunks' or vertical slices of all series data at one
         timepoint via the values in boundaries.
         '''
-        self.data = []
         self.isVerbose = isVerbose
         self.isVeryVerbose = isVeryVerbose
 
-        previousBound = 0
-        for bound in boundaryList:
-            self.data.append(chunk(fileContent[previousBound:bound],
-                                   isVerbose=self.isVerbose,
-                                   isVeryVerbose=self.isVeryVerbose))
-            previousBound = bound + 1
-
-        self.chunkLength = len(self.data[0])
         self.__chunkIndex = 0
+
+        if data:
+            self.data = data
+        else:
+            self.data = []
 
         if self.isVeryVerbose:
 
-            print("finished instantiating chunkList")
+            print("chunkList created.")
 
     def __len__(self):
         return len(self.data)
+
+    def append(self, chunk):
+        self.data.append(chunk)
+
+    def pop(self, index):
+        self.data.pop(index)
+
+    def __getitem__(self, index):
+        return self.data[index]
+
+    def __setitem__(self, index, chunk):
+        self.data[index] = chunk
 
     def __iter__(self):
         return self
@@ -252,7 +255,6 @@ class parsedFile(object):
         if self.isVeryVerbose:
 
             print("Finished processing csv table for ")
-
 
         import csv
 
