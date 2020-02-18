@@ -86,7 +86,6 @@ class chunk(object):
         A data object used in chunkList. Expects a set of lines that
         make up a file chunk in the rawFile.fileContent
         '''
-        self.rawFileChunk = lines
         self.isVerbose = isVerbose
         self.isVeryVerbose = isVeryVerbose
 
@@ -94,12 +93,12 @@ class chunk(object):
         self.temperature = 0
         self.experiments = []
 
-        self.processRawFileChunk()
+        self.processRawFileChunk(lines)
 
     def __len__(self):
-        return len(self.rawFileChunk)
+        return len(self.experiments)
 
-    def processRawFileChunk(self):
+    def processRawFileChunk(self, rawFileChunk):
         '''
         Extracts data from a chunk. The experiment data is returned as
         a list with each value being from a different series.
@@ -136,7 +135,7 @@ class chunk(object):
                 return secondsElapsed
 
             self.secondsElapsed = \
-                transformStringTimeToSeconds(self.rawFileChunk[0]
+                transformStringTimeToSeconds(rawFileChunk[0]
                                              .split()[0])
 
         def getTemperature():
@@ -144,7 +143,7 @@ class chunk(object):
             Gets the temperature at the time of recording for the data
             chunk
             '''
-            self.temperature = float(self.rawFileChunk[0].split()[1])
+            self.temperature = float(rawFileChunk[0].split()[1])
 
         def getExperiments():
             '''
@@ -152,9 +151,9 @@ class chunk(object):
             self.secondsElapsed
             '''
             # Handle the first line
-            data = [float(self.rawFileChunk[0].split()[2])]
+            data = [float(rawFileChunk[0].split()[2])]
             # Handle the rest
-            for line in self.rawFileChunk[1:]:
+            for line in rawFileChunk[1:]:
                 data.append(float(line.split()[0]))
 
             self.experiments = data
