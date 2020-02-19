@@ -8,56 +8,57 @@ class rawFile(object):
         a raw microplate devices file to be decoded.
         expects a filename.
         '''
-        self.filename = filename
         self.isVerbose = isVerbose
         self.isVeryVerbose = isVeryVerbose
+
+        self.filename = filename
+        self.numHeaderLines = 3
 
         if self.isVeryVerbose:
 
             print("Reading file " + self.filename)
 
         with open(self.filename, encoding="latin-1") as file:
-            rawContent = file.readlines()
-            fileContent = self.removeHeader(rawContent)
+            self.removeHeader(file)
+            self.chunks = self.readChunks(file)
 
-        self.chunks = chunkList(self.generateBoundaryList(fileContent),
-                                fileContent, isVerbose=self.isVerbose,
-                                isVeryVerbose=self.isVeryVerbose)
-
-    def removeHeader(self, rawContent):
+    def removeHeader(self, fileIterable):
         '''
         The above line gets rid of header information. In the future this
         may be used in order to parse files differently, but for our
-        purposes where we just want to extract data from the series runs of
-        the microplate reader, this is okay.
+        purposes where we just are processing kinetics studies.
         '''
 
-        return rawContent[3:]
+        for i in range(0, self.numHeaderLines):
+            next(fileIterable)
 
-    def generateBoundaryList(self, fileContent):
+    def readChunks(self, fileIterable):
         '''
-        Uses the whitespace formatting to generate a sequence to break a raw
-        file into time domain chunks.
+        looks for separator '\t\t\n' to distinguish between time points.
         '''
-        boundaryList = [i for i, value in enumerate(fileContent)
-                        if value == "\t\t\n"]
 
-        if self.isVeryVerbose:
+        chunkBuffer = []
+        chunks = chunkList(isVerbose=self.isVeryVerbose,
+                           isVeryVerbose=self.isVeryVerbose)
+        for line in fileIterable:
+            if line == "\t\t\n":
+                chunks.append(chunk(chunkBuffer))
+                chunkBuffer = []
+            else:
+                chunkBuffer.append(line)
 
-            print("generated boundaryList for :" + self.filename)
-            print(boundaryList)
-
-        return boundaryList
+        return chunks
 
     def decode(self, useNumPy=False):
         '''
-        Decodes a rawFile and returns a decodedFile to use.
+        Decodes a rawFile and returns a parsedFile to use.
         '''
+
         timeSeries = []
         tempSeries = []
         experiments = []
 
-        for experiment in range(0, self.chunks.chunkLength):
+        for experiment in range(0, len(self.chunks[0])):
             experiments.append([])
             '''
             Taking advantage of the fact that each line in a chunk corresponds
@@ -65,18 +66,7 @@ class rawFile(object):
             of lists to organize experimentData into.
             '''
 
-        if self.isVeryVerbose:
-
-            chunkcount = 1
-
         for chunk in self.chunks:
-
-            if self.isVeryVerbose:
-
-                print("Processing chunk {} of {} for {} decode"
-                      .format(chunkcount, len(self.chunks), self.filename))
-
-                chunkcount += 1
 
             timeSeries.append(chunk.secondsElapsed)
             tempSeries.append(chunk.temperature)
@@ -96,7 +86,6 @@ class chunk(object):
         A data object used in chunkList. Expects a set of lines that
         make up a file chunk in the rawFile.fileContent
         '''
-        self.rawFileChunk = lines
         self.isVerbose = isVerbose
         self.isVeryVerbose = isVeryVerbose
 
@@ -104,12 +93,12 @@ class chunk(object):
         self.temperature = 0
         self.experiments = []
 
-        self.processRawFileChunk()
+        self.processRawFileChunk(lines)
 
     def __len__(self):
-        return len(self.rawFileChunk)
+        return len(self.experiments)
 
-    def processRawFileChunk(self):
+    def processRawFileChunk(self, rawFileChunk):
         '''
         Extracts data from a chunk. The experiment data is returned as
         a list with each value being from a different series.
@@ -146,7 +135,7 @@ class chunk(object):
                 return secondsElapsed
 
             self.secondsElapsed = \
-                transformStringTimeToSeconds(self.rawFileChunk[0]
+                transformStringTimeToSeconds(rawFileChunk[0]
                                              .split()[0])
 
         def getTemperature():
@@ -154,7 +143,7 @@ class chunk(object):
             Gets the temperature at the time of recording for the data
             chunk
             '''
-            self.temperature = float(self.rawFileChunk[0].split()[1])
+            self.temperature = float(rawFileChunk[0].split()[1])
 
         def getExperiments():
             '''
@@ -162,9 +151,9 @@ class chunk(object):
             self.secondsElapsed
             '''
             # Handle the first line
-            data = [float(self.rawFileChunk[0].split()[2])]
+            data = [float(rawFileChunk[0].split()[2])]
             # Handle the rest
-            for line in self.rawFileChunk[1:]:
+            for line in rawFileChunk[1:]:
                 data.append(float(line.split()[0]))
 
             self.experiments = data
@@ -176,32 +165,39 @@ class chunk(object):
 
 class chunkList(object):
 
-    def __init__(self, boundaryList, fileContent, isVerbose=False,
-                 isVeryVerbose=False):
+    def __init__(self, data=None, isVerbose=False, isVeryVerbose=False):
         '''
         generates 'chunks' or vertical slices of all series data at one
         timepoint via the values in boundaries.
         '''
-        self.data = []
         self.isVerbose = isVerbose
         self.isVeryVerbose = isVeryVerbose
 
-        previousBound = 0
-        for bound in boundaryList:
-            self.data.append(chunk(fileContent[previousBound:bound],
-                                   isVerbose=self.isVerbose,
-                                   isVeryVerbose=self.isVeryVerbose))
-            previousBound = bound + 1
-
-        self.chunkLength = len(self.data[0])
         self.__chunkIndex = 0
+
+        if data:
+            self.data = data
+        else:
+            self.data = []
 
         if self.isVeryVerbose:
 
-            print("finished instantiating chunkList")
+            print("chunkList created.")
 
     def __len__(self):
         return len(self.data)
+
+    def append(self, chunk):
+        self.data.append(chunk)
+
+    def pop(self, index):
+        self.data.pop(index)
+
+    def __getitem__(self, index):
+        return self.data[index]
+
+    def __setitem__(self, index, chunk):
+        self.data[index] = chunk
 
     def __iter__(self):
         return self
@@ -252,12 +248,12 @@ class parsedFile(object):
                                self.tempSeries[rowNumber]]
             experimentColumns = [experiment[rowNumber] for experiment
                                  in self.experiments]
-            if self.isVeryVerbose:
-
-                print("Processed table row {} of {} for csv: {}"
-                      .format(rowNumber + 1, numberOfRows, filename))
 
             return timeTempColumns + experimentColumns
+
+        if self.isVeryVerbose:
+
+            print("Finished processing csv table for ")
 
         import csv
 
@@ -317,13 +313,11 @@ def main():
                                             '2020')
 
     parser.add_argument('-i', '--input', type=str, help='''\
-                        The input Molecular Devices text
-                        filenames.''', nargs='+')
+                        The input Molecular Devices text filenames.''',
+                        nargs='+')
 
     parser.add_argument('-o', '--output', type=str, help='''\
-                        (optional) The output .csv filenames.
-                        If left blank, will be the input filename with
-                        extension .csv''', nargs='+')
+                        the output .csv filenames.''', nargs='+')
 
     parser.add_argument('-v', '--verbose', action='store_true', help='''\
                         enables debug printing''')
